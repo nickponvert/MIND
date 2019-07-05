@@ -48,7 +48,7 @@ class mind_ensemble():
         print(res['message'])
         y_final = res['x'].reshape((y_init.shape))
         # Rotate &  whiten to obtain canonical representation
-        pca = PCA(whiten=True)
+        pca = PCA(whiten=True, svd_solver='full')
         self.y = pca.fit_transform(y_final)
         
     def loss_fun(self, y):
@@ -70,6 +70,7 @@ class mind_ensemble():
         T = self.x.shape[0]        
         self.single_P = np.zeros((self.n_trees, T, T))
         for t in range(self.n_trees):
+            print("Fitting tree {} of {}".format(t, self.n_trees))
             tree = mind_tree(self.x, manifold_dim=self.manifold_dim, rng=self.rng)
             self.trees[t] = tree
             tree.compute_probs()
@@ -83,7 +84,7 @@ class mind_ensemble():
         if self.P is None:
             self.compute_probs()
         eps = 1e-100
-        D = np.sqrt(-np.log(self.P)+eps)
+        D = np.sqrt(-np.log(self.P+eps))
         D = shortest_path(D,method='J') # global distances
         self.D = (D + D.T)/2 # symmetrize
         
@@ -115,7 +116,7 @@ class mind_tree():
         self.node_id = None
         # TO DO: check if None in functions, don't compute if not None
         
-    def fit_tree(self, x=None,level=0, number=0, n_dir=10, n_leaf=40):
+    def fit_tree(self, x=None,level=0, number=0, n_dir=10, n_leaf=None):
         """ Recursively partition state space by fitting decision trees
             n_dir: n. of random splitting directions
             n_leaf: minimum samples in a leaf node 
@@ -123,6 +124,9 @@ class mind_tree():
         if x is None:
             x = self.x
         n = x.shape[0]  # samples
+        if n_leaf is None:
+            min_leaf_samples = self.x.shape[1]+1 # Can't have less samples than dimensions in the leaves
+            n_leaf = min_leaf_samples
         if n < 2*n_leaf: # stop, fit pca to successors
             leaf = self.make_leaf(x, number, level)
             self.leaves.append(leaf)
@@ -157,6 +161,9 @@ class mind_tree():
         if (np.sum(idx_left) < n_leaf) | (len(idx_left)-np.sum(idx_left)< n_leaf):
             leaf = self.make_leaf(x, number, level)
             self.leaves.append(leaf)
+            #import ipdb; ipdb.set_trace()
+            if (level==0) & (number==0):
+                self.tree=leaf
             return leaf
         # Not done, make splits and continue
         left_leaf = self.fit_tree(x[idx_left], level+1, number+1, 
@@ -184,7 +191,7 @@ class mind_tree():
         print(res['message'])
         y_final = res['x'].reshape((y_init.shape))
         # Rotate &  whiten to obtain canonical representation
-        pca = PCA(whiten=True)
+        pca = PCA(whiten=True, svd_solver='full')
         self.coordinates = pca.fit_transform(y_final)
         #return self.coordinates
         
